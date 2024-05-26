@@ -1,24 +1,28 @@
 package com.yulin.module
 
-import com.alibaba.fastjson.JSON.parseObject
+
+import com.aliyun.green20220302.models.ImageModerationResponse
+import com.aliyun.green20220302.models.ImageModerationResponseBody.ImageModerationResponseBodyData
 import com.baidu.aip.contentcensor.AipContentCensor
 import com.baidu.aip.contentcensor.EImgType
 import com.yulin.ImageCheck.logger
 import com.yulin.config.Config
 import com.yulin.config.ImageCheckApiConfig
 import com.yulin.entity.CheckResult
+import com.yulin.entity.LocalBody
+import com.yulin.util.AliImageCheckUtil.aliImageCheckFun
 import com.yulin.util.CacheUtil
 import com.yulin.util.InternetUtil
 import com.yulin.util.YuLinImageUtil
+import io.ktor.client.statement.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonElement
 import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.message.data.Image
 import org.json.JSONObject
 import java.math.BigDecimal
-import java.math.RoundingMode
 import java.util.*
+
 
 object ImageCheckModule {
 
@@ -26,14 +30,18 @@ object ImageCheckModule {
      * 图片审核主方法
      */
     suspend fun imageCheck(event: GroupMessageEvent) {
+        //如果不在启用的群内就关闭
         if (!Config.groupList.contains(event.group.id)) {
             return
         }
         for (message in event.message) {
             if (message is Image) {
                 val imageUrl = YuLinImageUtil.getImageUrl(message)
+                //获取图片ByteArrayOutputStream以判断图片类型与大小
                 val imageToBytesArray = YuLinImageUtil.imageToBytesArray(imageUrl) ?: continue
+                //获取图片类型
                 val mimeType = CacheUtil.getMimeType(imageToBytesArray)
+                //如果图片是gif或者图片小于100kb就不审核
                 if (mimeType == "gif" || imageToBytesArray.size() / 1000 < Config.checkImageSize) {
                     withContext(Dispatchers.IO) {
                         imageToBytesArray.close()
@@ -41,10 +49,12 @@ object ImageCheckModule {
                     continue
                 }
                 var b: CheckResult
+                //图片审核，可扩展
                 try {
                     b = when (Config.apiSelect) {
-                        0 -> baiduImageCheck(imageUrl)
-                        1 -> localImageCheck(imageUrl)
+                        0 -> localImageCheck(imageUrl)
+                        1 -> baiduImageCheck(imageUrl)
+                        2 -> aliImageCheck(imageUrl)
                         else -> {
                             return
                         }
@@ -90,7 +100,7 @@ object ImageCheckModule {
      * 百度图片审核
      * 检测图片是否合规，如果不合规返回 false
      */
-    private fun baiduImageCheck(url: String): CheckResult {
+    private suspend fun baiduImageCheck(url: String): CheckResult {
         var jsonObject = JSONObject()
         try {
             val imageCheck = ImageCheckApiConfig.baiduApi
@@ -118,25 +128,49 @@ object ImageCheckModule {
             logger.info(jsonObject.toString())
         }
     }
-
+    /**
+     * 阿里图片审核
+     */
+    private suspend fun aliImageCheck(url: String): CheckResult {
+        val response: ImageModerationResponse?
+        try {
+            response = aliImageCheckFun(url)
+            if (response!!.getStatusCode() == 200){
+                val data = response.getBody().getData()
+                val results = data.getResult()
+                for (r in results) {
+                    if (r.confidence > ImageCheckApiConfig.aliApi.checkScore){
+                        return CheckResult(false, "是涩图！")
+                    }
+                }
+                return CheckResult(true, "合规")
+            }
+        }catch (e: Exception){
+            e.printStackTrace()
+            if (Config.checkFailed) {
+                return localImageCheck(url)
+            }
+            return CheckResult(null, "阿里审核失败")
+        }
+        return CheckResult(null, "阿里审核失败")
+    }
     /**
      * 本地图片审核
      */
-    private fun localImageCheck(url: String): CheckResult {
+    private suspend fun localImageCheck(url: String): CheckResult {
         val imageUrl = ImageCheckApiConfig.localApi.localAddress + url
-        var data: JsonElement? = InternetUtil.post(imageUrl)
+        var data: LocalBody? = InternetUtil.getLocalBody(imageUrl)
         for (i in 1..3) {
             if (data == null) {
                 logger.info("data is null , 重试${i}次")
-                data = InternetUtil.post(imageUrl)
+                data = InternetUtil.getLocalBody(imageUrl)
             } else {
                 break
             }
         }
-        val pron =
-            BigDecimal(parseObject(data.toString())["porn"].toString().toDouble()).setScale(2, RoundingMode.HALF_UP)
+        val pron = data!!.porn
 
-        return CheckResult(pron compareTo BigDecimal(ImageCheckApiConfig.localApi.imagePron) < 0, "data is null")
+        return CheckResult(pron.toBigDecimal() compareTo BigDecimal(ImageCheckApiConfig.localApi.imagePron) < 0, "data is null")
     }
 
 }

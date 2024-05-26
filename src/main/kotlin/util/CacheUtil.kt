@@ -55,7 +55,7 @@ object CacheUtil {
     }
 
     /**
-     *
+     * 图片保存到本地
      */
     fun saveToLocal(infoStream: ByteArrayOutputStream, imageName: String): String {
         try {

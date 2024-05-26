@@ -1,15 +1,16 @@
 package com.yulin.config.entity
 
-import kotlinx.serialization.SerialName
+
 import kotlinx.serialization.Serializable
 import net.mamoe.mirai.console.data.ValueDescription
+import net.mamoe.mirai.console.data.ValueName
 
 @Serializable
 data class ImageCheckLocal(
     @ValueDescription("本地地址")
-    @SerialName("localAddress")
+    @ValueName("localAddress")
     var localAddress: String = "",
     @ValueDescription("本地地址")
-    @SerialName("imagePron")
+    @ValueName("imagePron")
     var imagePron: Double = 0.45
 )
