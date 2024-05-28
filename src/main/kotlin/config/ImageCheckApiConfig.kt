@@ -3,7 +3,7 @@ package com.yulin.config
 import com.yulin.config.entity.ImageCheckAlibaba
 import com.yulin.config.entity.ImageCheckBaidu
 import com.yulin.config.entity.ImageCheckLocal
-import kotlinx.serialization.SerialName
+import com.yulin.config.entity.ImageCheckTencent
 import net.mamoe.mirai.console.data.AutoSavePluginConfig
 import net.mamoe.mirai.console.data.ValueDescription
 import net.mamoe.mirai.console.data.ValueName
@@ -39,4 +39,11 @@ object ImageCheckApiConfig : AutoSavePluginConfig("imageCheckApiConfig") {
     )
     @ValueName("aliApi")
     var aliApi: ImageCheckAlibaba by value()
+    @ValueDescription("腾讯审核api\n" +
+            "腾讯secretId\n" +
+            "腾讯secretKey\n" +
+            "腾讯地区的服务器(示例：<BucketName-APPID>.cos.<Region>.myqcloud.com(image1-1234567890.cos.ap-beijing.myqcloud.com))\n" +
+            "图片审核阈值(0采用腾讯默认阈值)")
+    @ValueName("tencentApi")
+    var tencentApi: ImageCheckTencent by value()
 }

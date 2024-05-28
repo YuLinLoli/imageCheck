@@ -19,7 +19,4 @@ data class ImageCheckBaidu(
     @ValueDescription("百度secretKey")
     @ValueName("secretKey")
     var secretKey: String = "",
-    @ValueDescription("是否启用疑似涩图的图片撤回")
-    @ValueName("suspected")
-    var suspected: Boolean = false
 )

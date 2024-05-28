@@ -2,21 +2,24 @@ package com.yulin.module
 
 
 import com.aliyun.green20220302.models.ImageModerationResponse
-import com.aliyun.green20220302.models.ImageModerationResponseBody.ImageModerationResponseBodyData
 import com.baidu.aip.contentcensor.AipContentCensor
 import com.baidu.aip.contentcensor.EImgType
+import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse
 import com.yulin.ImageCheck.logger
 import com.yulin.config.Config
 import com.yulin.config.ImageCheckApiConfig
+import com.yulin.entity.ApiEnum
 import com.yulin.entity.CheckResult
 import com.yulin.entity.LocalBody
 import com.yulin.util.AliImageCheckUtil.aliImageCheckFun
 import com.yulin.util.CacheUtil
 import com.yulin.util.InternetUtil
+import com.yulin.util.TencentCheckModule.tencentImageCheckUtil
 import com.yulin.util.YuLinImageUtil
-import io.ktor.client.statement.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.mamoe.mirai.console.MiraiConsole
+import net.mamoe.mirai.console.util.ConsoleExperimentalApi
 import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.message.data.Image
 import org.json.JSONObject
@@ -29,6 +32,7 @@ object ImageCheckModule {
     /**
      * 图片审核主方法
      */
+    @OptIn(ConsoleExperimentalApi::class)
     suspend fun imageCheck(event: GroupMessageEvent) {
         //如果不在启用的群内就关闭
         if (!Config.groupList.contains(event.group.id)) {
@@ -52,16 +56,20 @@ object ImageCheckModule {
                 //图片审核，可扩展
                 try {
                     b = when (Config.apiSelect) {
-                        0 -> localImageCheck(imageUrl)
-                        1 -> baiduImageCheck(imageUrl)
-                        2 -> aliImageCheck(imageUrl)
+                        ApiEnum.LOCAL.code -> localImageCheck(imageUrl)
+                        ApiEnum.BAIDU.code -> baiduImageCheck(imageUrl)
+                        ApiEnum.ALI.code -> aliImageCheck(imageUrl)
+                        ApiEnum.TENCENT.code -> tencentImageCheck(imageUrl)
                         else -> {
+                            logger.error("请关闭Mirai并编辑配置文件完成设定！")
+                            MiraiConsole.shutdown()
                             return
                         }
                     }
                 } catch (e: Exception) {
                     event.bot.getFriend(Config.master)?.sendMessage("出现错误！意料之外的错误！请带上日志去github反馈issues\n" +
-                            "https://github.com/YuLinLoli/imageCheck/issues")
+                            "https://github.com/YuLinLoli/imageCheck/issues\n" +
+                            "出错消息：")
                     event.bot.getFriend(Config.master)?.sendMessage(message)
                     withContext(Dispatchers.IO) {
                         imageToBytesArray.close()
@@ -95,7 +103,47 @@ object ImageCheckModule {
             }
         }
     }
+    /**
+     * 如果图片审核失败则调用本地方法（开启设置的话）
+     */
+    private suspend fun localImageCheckOn(url: String, errorServiceName: String): CheckResult {
+        return try {
+            localImageCheck(url)
+        }catch (e: Exception){
+            CheckResult(null, "${errorServiceName}与本地审核失败")
+        }
+    }
 
+    /**
+     * 腾讯图片审核
+     */
+    private suspend fun tencentImageCheck(url: String): CheckResult {
+        val response: ImageAuditingResponse?
+        try {
+            response = tencentImageCheckUtil(url)
+            if (response!!.pornInfo.code != "0"){
+                return CheckResult(null, response.pornInfo.msg)
+            }
+            if (0 == ImageCheckApiConfig.tencentApi.imageScore){
+                return when{
+                    response.pornInfo.score.toInt() <= 60 -> CheckResult(true, "合规")
+                    response.pornInfo.score.toInt() <= 90 -> CheckResult(!Config.suspected, "疑似")
+                    response.pornInfo.score.toInt() <= 100 -> CheckResult(false, "是涩图！")
+                    else -> CheckResult(null, "腾讯审核失败")
+                }
+            }
+            if (response.pornInfo.score.toInt() > ImageCheckApiConfig.tencentApi.imageScore){
+                return CheckResult(false, "是涩图！")
+            }
+            return CheckResult(true, "合规")
+        }catch (e: Exception){
+            if (Config.checkFailed) {
+                return localImageCheckOn(url, ApiEnum.TENCENT.apiName)
+            }
+            e.printStackTrace()
+            return CheckResult(null, "腾讯审核失败")
+        }
+    }
     /**
      * 百度图片审核
      * 检测图片是否合规，如果不合规返回 false
@@ -115,13 +163,14 @@ object ImageCheckModule {
                 return CheckResult(true, "合规")
             }
             if (string == "疑似") {
-                return CheckResult(!ImageCheckApiConfig.baiduApi.suspected, "疑似")
+                return CheckResult(!Config.suspected, "疑似")
             }
             return CheckResult(false, "是涩图！")
         } catch (e: Exception) {
             if (Config.checkFailed) {
-                return localImageCheck(url)
+                return localImageCheckOn(url, ApiEnum.BAIDU.apiName)
             }
+            e.printStackTrace()
             return CheckResult(null, jsonObject.getString("error_msg"))
 
         } finally {
@@ -146,10 +195,10 @@ object ImageCheckModule {
                 return CheckResult(true, "合规")
             }
         }catch (e: Exception){
-            e.printStackTrace()
             if (Config.checkFailed) {
-                return localImageCheck(url)
+                return localImageCheckOn(url, ApiEnum.ALI.apiName)
             }
+            e.printStackTrace()
             return CheckResult(null, "阿里审核失败")
         }
         return CheckResult(null, "阿里审核失败")

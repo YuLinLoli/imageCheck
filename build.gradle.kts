@@ -20,7 +20,7 @@ mirai {
     }
 }
 group = "com.yulin"
-version = "1.1.1"
+version = "1.1.2"
 buildConfig {
     className("BuildConfig")
     packageName("com.yulin.cg")
@@ -59,6 +59,7 @@ dependencies {
     //图片审核SDK
     implementation("com.baidu.aip:java-sdk:4.16.17")
     implementation("com.aliyun:green20220302:2.2.5")
+    implementation("com.qcloud:cos_api:5.6.213")
 
 
 
