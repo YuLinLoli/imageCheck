@@ -14,7 +14,7 @@ import com.yulin.entity.LocalBody
 import com.yulin.util.AliImageCheckUtil.aliImageCheckFun
 import com.yulin.util.CacheUtil
 import com.yulin.util.InternetUtil
-import com.yulin.util.TencentCheckModule.tencentImageCheckUtil
+import com.yulin.util.TencentCheckUtil.tencentImageCheckUtil
 import com.yulin.util.YuLinImageUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

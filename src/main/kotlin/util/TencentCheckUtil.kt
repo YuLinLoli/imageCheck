@@ -8,8 +8,7 @@ import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse
 import com.qcloud.cos.region.Region
 import com.yulin.config.ImageCheckApiConfig
 
-object TencentCheckModule {
-
+object TencentCheckUtil {
     private val cred by lazy { BasicCOSCredentials(ImageCheckApiConfig.tencentApi.secretId, ImageCheckApiConfig.tencentApi.secretKey) }
     private val clientConfig by lazy {
         ClientConfig(Region(ImageCheckApiConfig.tencentApi.region))
